@@ -168,18 +168,57 @@ class TextToSpeech:
 
         for idx, (question, answer) in enumerate(qa_pairs, 1):
             for speaker_type, content in [("question", question), ("answer", answer)]:
-                temp_file = os.path.join(
-                    temp_dir, f"{idx}_{speaker_type}.{self.audio_format}"
-                )
+                if not content.strip():  # Skip empty responses
+                  continue
+                
                 voice = provider_config.get("default_voices", {}).get(speaker_type)
                 model = provider_config.get("model")
 
+                # Get audio data from provider
                 audio_data = self.provider.generate_audio(content, voice, model)
+                
+                # Detect the actual audio format from the binary data
+                actual_format = self._detect_audio_format(audio_data)
+                
+                # Use the detected format for the file extension
+                temp_file = os.path.join(
+                    temp_dir, f"{idx}_{speaker_type}.{actual_format}"
+                )
+                
+                print(f"DEBUG: Saving audio as {actual_format} format to {temp_file}")
+                
                 with open(temp_file, "wb") as f:
                     f.write(audio_data)
                 audio_files.append(temp_file)
 
         return audio_files
+
+    def _detect_audio_format(self, audio_data: bytes) -> str:
+        """Detect audio format from the binary data."""
+        if not audio_data:
+            return self.audio_format  # fallback to configured format
+        
+        # Check for MP3 format (starts with ID3 tag or MP3 frame sync)
+        if audio_data.startswith(b'ID3'):
+            print("DEBUG: Detected MP3 format (ID3 tag)")
+            return 'mp3'
+        elif len(audio_data) >= 2 and audio_data[0] == 0xFF and (audio_data[1] & 0xE0) == 0xE0:
+            print("DEBUG: Detected MP3 format (frame sync)")
+            return 'mp3'
+        
+        # Check for WAV format (starts with RIFF header)
+        elif audio_data.startswith(b'RIFF') and len(audio_data) >= 12 and b'WAVE' in audio_data[8:12]:
+            print("DEBUG: Detected WAV format")
+            return 'wav'
+        
+        # Check for other formats if needed
+        elif audio_data.startswith(b'fLaC'):
+            print("DEBUG: Detected FLAC format")
+            return 'flac'
+        
+        # Default fallback
+        print(f"DEBUG: Could not detect audio format from data starting with {audio_data[:8]}, using configured format: {self.audio_format}")
+        return self.audio_format
 
     def _merge_audio_files(self, audio_files: List[str], output_file: str) -> None:
         """

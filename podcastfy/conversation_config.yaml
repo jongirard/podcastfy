@@ -23,6 +23,7 @@ min_chunk_size: 600 # minimum number of characters to generate a round of discus
 
 text_to_speech:
   default_tts_model: "openai"
+  audio_format: "mp3"
   output_directories:
     transcripts: "./data/transcripts"
     audio: "./data/audio"
@@ -36,6 +37,11 @@ text_to_speech:
       question: "echo"
       answer: "shimmer"
     model: "tts-1-hd"
+  kokoros:
+    default_voices:
+      question: "af_sky"
+      answer: "am_michael"
+    model: "kokoros"
   edge:
     default_voices:
       question: "en-US-JennyNeural"
@@ -49,6 +55,5 @@ text_to_speech:
       question: "R"
       answer: "S"
       model: "en-US-Studio-MultiSpeaker"
-  audio_format: "mp3"
   temp_audio_dir: "data/audio/tmp/"
   ending_message: "See You Next Time!"

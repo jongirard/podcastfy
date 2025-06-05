@@ -21,6 +21,9 @@ import copy
 
 import logging
 
+# Version constant
+__version__ = "0.2.4"
+
 # Configure logging to show all levels and write to both file and console
 """ logging.basicConfig(
     level=logging.DEBUG,  # Show all levels of logs
@@ -34,10 +37,29 @@ import logging
 
 logger = setup_logger(__name__)
 
+# Create the Typer app with a callback for app-level options
+def version_callback(value: bool):
+    if value:
+        typer.echo(f"Podcastfy CLI version: {__version__}")
+        raise typer.Exit()
+
 app = typer.Typer()
 
 os.environ["LANGCHAIN_TRACING_V2"] = "False"
 
+@app.callback()
+def common_options(
+    version: bool = typer.Option(
+        False, "--version", "-v", 
+        help="Show the version and exit.",
+        callback=version_callback,
+        is_eager=True  # Important: This makes the option process before commands
+    ),
+):
+    """
+    Podcastfy CLI - Generate podcasts from web content or transcripts.
+    """
+    pass  # The logic is in the callback, so we don't need to do anything here
 
 def process_content(
     urls: Optional[List[str]] = None,
@@ -150,6 +172,10 @@ def process_content(
         logger.error(f"An error occurred in the process_content function: {str(e)}")
         raise
 
+# @app.command("version")
+# def version_command():
+#     """Display the version of Podcastfy CLI."""
+#     typer.echo(f"Podcastfy CLI version: {__version__}")
 
 @app.command()
 def main(
@@ -177,12 +203,6 @@ def main(
     ),
     image_paths: List[str] = typer.Option(
         None, "--image", "-i", help="Paths to image files to process"
-    ),
-    is_local: bool = typer.Option(
-        False,
-        "--local",
-        "-l",
-        help="Use a local LLM instead of a remote one (http://localhost:8080)",
     ),
     text: str = typer.Option(
         None, "--text", "-txt", help="Raw text input to be processed"
@@ -213,6 +233,8 @@ def main(
     Generate a podcast or transcript from a list of URLs, a file containing URLs, a transcript file, image files, or raw text.
     """
     try:
+        typer.echo(f"Podcastfy CLI v{__version__}")
+
         config = load_config()
         main_config = config.get("main", {})
 
@@ -360,7 +382,7 @@ def generate_podcast(
                 generate_audio=not transcript_only,
                 config=default_config,
                 conversation_config=conversation_config,
-                is_local=is_local,
+                llm_type=llm_type,
                 text=text,
                 model_name=llm_model_name,
                 api_key_label=api_key_label,
@@ -386,7 +408,7 @@ def generate_podcast(
                 config=default_config,
                 conversation_config=conversation_config,
                 image_paths=image_paths,
-                is_local=is_local,
+                llm_type=llm_type,
                 text=text,
                 model_name=llm_model_name,
                 api_key_label=api_key_label,

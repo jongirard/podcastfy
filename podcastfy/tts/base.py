@@ -56,14 +56,16 @@ class TTSProvider(ABC):
         
     def split_qa(self, input_text: str, ending_message: str, supported_tags: List[str] = None) -> List[Tuple[str, str]]:
         """
-        Split the input text into question-answer pairs.
+        Split the input text into question-answer pairs, handling both complete pairs 
+        and standalone Person1 blocks.
 
         Args:
             input_text (str): The input text containing Person1 and Person2 dialogues.
-            ending_message (str): The ending message to add to the end of the input text.
+            ending_message (str): The ending message (currently unused, kept for compatibility).
 
         Returns:
-                List[Tuple[str, str]]: A list of tuples containing (Person1, Person2) dialogues.
+            List[Tuple[str, str]]: A list of tuples containing (Person1, Person2) dialogues.
+                                  Standalone Person1 blocks will have empty string as Person2.
         """
         input_text = self.clean_tss_markup(input_text, supported_tags=supported_tags)
         
@@ -71,21 +73,46 @@ class TTSProvider(ABC):
         if input_text.strip().startswith("<Person2>"):
             input_text = "<Person1> Humm... </Person1>" + input_text
 
-        # Add ending message to the end of input_text
-        if input_text.strip().endswith("</Person1>"):
-            input_text += f"<Person2>{ending_message}</Person2>"
-
-        # Regular expression pattern to match Person1 and Person2 dialogues
-        pattern = r"<Person1>(.*?)</Person1>\s*<Person2>(.*?)</Person2>"
-
-        # Find all matches in the input text
-        matches = re.findall(pattern, input_text, re.DOTALL)
-
-        # Process the matches to remove extra whitespace and newlines
-        processed_matches = [
-            (" ".join(person1.split()).strip(), " ".join(person2.split()).strip())
-            for person1, person2 in matches
-        ]
+        # Strategy: Instead of forcing pairs, let's find all Person1 and Person2 blocks
+        # separately, then intelligently pair them up
+        
+        # Find all Person1 blocks with their positions
+        person1_pattern = r"<Person1>(.*?)</Person1>"
+        person1_matches = []
+        for match in re.finditer(person1_pattern, input_text, re.DOTALL):
+            content = " ".join(match.group(1).split()).strip()
+            person1_matches.append((content, match.start(), match.end()))
+        
+        # Find all Person2 blocks with their positions  
+        person2_pattern = r"<Person2>(.*?)</Person2>"
+        person2_matches = []
+        for match in re.finditer(person2_pattern, input_text, re.DOTALL):
+            content = " ".join(match.group(1).split()).strip()
+            person2_matches.append((content, match.start(), match.end()))
+        
+        # Now pair them up intelligently
+        processed_matches = []
+        person2_index = 0  # Track which Person2 we're looking at
+        
+        for person1_content, p1_start, p1_end in person1_matches:
+            # Look for the next Person2 that comes after this Person1
+            paired_person2 = ""
+            
+            # Check if there's a Person2 that starts after this Person1 ends
+            while person2_index < len(person2_matches):
+                p2_content, p2_start, p2_end = person2_matches[person2_index]
+                
+                if p2_start >= p1_end:  # This Person2 comes after our Person1
+                    paired_person2 = p2_content
+                    person2_index += 1  # Move to next Person2 for next iteration
+                    break
+                else:
+                    # This Person2 comes before our Person1, skip it
+                    person2_index += 1
+            
+            # Add the pair (even if Person2 is empty)
+            processed_matches.append((person1_content, paired_person2))
+        
         return processed_matches
 
     def clean_tss_markup(self, input_text: str, additional_tags: List[str] = ["Person1", "Person2"], supported_tags: List[str] = None) -> str:
